@@ -6,8 +6,6 @@ import java.io.*;
 import java.util.HashMap;
 import java.util.Random;
 
-import static java.lang.Math.max;
-
 @WebServlet(name = "DocumentServlet", urlPatterns = "/storage/documents/*")
 public class DocumentServlet extends HttpServlet {
 
@@ -70,6 +68,7 @@ public class DocumentServlet extends HttpServlet {
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
         ensureUuidParameter(false, req, resp);
+
         byte[] data = readContent(req);
         String contentType = req.getContentType();
         String uuid = newUUID();
@@ -112,5 +111,15 @@ public class DocumentServlet extends HttpServlet {
 
         BufferedOutputStream out = new BufferedOutputStream(resp.getOutputStream());
         out.write(doc);
+    }
+
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        ensureUuidParameter(true, req, resp);
+        String uuid = getExistingUuid(req, resp);
+
+        this.documents.remove(uuid);
+        this.contentTypes.remove(uuid);
+        resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
     }
 }
