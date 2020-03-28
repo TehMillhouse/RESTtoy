@@ -29,7 +29,7 @@ public class DocumentServlet extends HttpServlet {
 
     static private void ensureUuidParameter(boolean shouldBePresent, HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        if ((req.getPathInfo() != null) == shouldBePresent) {
+        if ((req.getPathInfo() != null) != shouldBePresent) {
             resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
         }
     }
@@ -37,7 +37,11 @@ public class DocumentServlet extends HttpServlet {
     private String getExistingUuid(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         String uuid = req.getPathInfo().substring(1);  // strip '/' at beginning
         if (!this.documents.containsKey(uuid)) {
+            // a note on API design:
+            // sendError does not actually send an error (and escape via Exception), and since using exceptions
+            // as a control flow mechanism is frowned upon, I suppose we're doing more null checks, eh?
             resp.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return null;
         }
         return uuid;
     }
@@ -85,6 +89,7 @@ public class DocumentServlet extends HttpServlet {
             throws IOException {
         ensureUuidParameter(true, req, resp);
         String uuid = getExistingUuid(req, resp);
+        if (uuid == null) return;
 
         // judgment call: DRY principle
         // technically, I could factor out the code common to doPut and doPost,
@@ -104,6 +109,7 @@ public class DocumentServlet extends HttpServlet {
             throws IOException {
         ensureUuidParameter(true, req, resp);
         String uuid = getExistingUuid(req, resp);
+        if (uuid == null) return;
 
         resp.setContentType(this.contentTypes.get(uuid));
         byte[] doc = this.documents.get(uuid);
@@ -111,12 +117,14 @@ public class DocumentServlet extends HttpServlet {
 
         BufferedOutputStream out = new BufferedOutputStream(resp.getOutputStream());
         out.write(doc);
+        out.flush();
     }
 
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         ensureUuidParameter(true, req, resp);
         String uuid = getExistingUuid(req, resp);
+        if (uuid == null) return;
 
         this.documents.remove(uuid);
         this.contentTypes.remove(uuid);
