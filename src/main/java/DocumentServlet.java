@@ -26,11 +26,14 @@ public class DocumentServlet extends HttpServlet {
         byte[] doc = new byte[total];
         int read = 0;
         int available = 0;
+        // I'm not using a BufferedReader for this, since the OS is keeping a buffer for all the data
+        // that has been received anyways.
         InputStream is = req.getInputStream();
         while (read < total) {
             available = is.available();
             is.read(doc, read, available);  // trickle-fill our buffer.
             // This loop would also be a good place to add timeout logic
+
             read += available;
         }
 
