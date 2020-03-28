@@ -6,6 +6,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.util.HashMap;
 import java.util.Random;
 
 import static java.lang.Math.max;
@@ -14,6 +15,9 @@ import static java.lang.Math.max;
 public class DocumentServlet extends HttpServlet {
 
     static private Random rng = new Random();
+    // if Java had tuples, I'd use a HashMap<String, (String, byte[])>, but alas...
+    private HashMap<String, byte[]> documents = new HashMap<>();
+    private HashMap<String, String> contentTypes = new HashMap<>();
 
     static private String newUUID() {
         StringBuilder uuid = new StringBuilder();
@@ -28,13 +32,11 @@ public class DocumentServlet extends HttpServlet {
         return uuid.toString();
     }
 
-    @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+    static private byte[] readContent(HttpServletRequest req) throws IOException {
         // since "documents don't need to be persisted cross server shutdown"
         // I'm assuming every file will fit in a single allocation in memory
         int total = req.getContentLength();
-        byte[] doc = new byte[total];
+        byte[] content = new byte[total];
         int read = 0;
         int available = 0;
         // I'm not using a BufferedReader for this, since the OS is keeping a buffer for all the data
@@ -43,17 +45,29 @@ public class DocumentServlet extends HttpServlet {
         while (read < total) {
             // ensure Blocking read, rather than burning CPU time
             available = Math.max(is.available(), 1);
-            is.read(doc, read, available);
+            is.read(content, read, available);
             // This loop would also be a good place to add timeout logic
             read += available;
         }
+        return content;
+    }
 
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        if (req.getPathInfo() != null) {
+            // user is trying to POST to /storage/documents/SOMETHING
+            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        }
+        byte[] data = readContent(req);
+        String contentType = req.getContentType();
         String uuid = newUUID();
+        this.contentTypes.put(uuid, contentType);
+        this.documents.put(uuid, data);
 
         resp.setStatus(HttpServletResponse.SC_CREATED);
         PrintWriter out = resp.getWriter();
         out.write(uuid + '\n');
-        // super.doPost(req, resp);
     }
 
     @Override
