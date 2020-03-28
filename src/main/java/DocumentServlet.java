@@ -1,4 +1,3 @@
-import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -30,6 +29,21 @@ public class DocumentServlet extends HttpServlet {
         return uuid.toString();
     }
 
+    static private void ensureUuidParameter(boolean shouldBePresent, HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        if ((req.getPathInfo() != null) == shouldBePresent) {
+            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        }
+    }
+
+    private String getExistingUuid(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        String uuid = req.getPathInfo().substring(1);  // strip '/' at beginning
+        if (!this.documents.containsKey(uuid)) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND);
+        }
+        return uuid;
+    }
+
     static private byte[] readContent(HttpServletRequest req) throws IOException {
         // since "documents don't need to be persisted cross server shutdown"
         // I'm assuming every file will fit in a single allocation in memory
@@ -55,10 +69,7 @@ public class DocumentServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        if (req.getPathInfo() != null) {
-            // user is trying to POST to /storage/documents/SOMETHING
-            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-        }
+        ensureUuidParameter(false, req, resp);
         byte[] data = readContent(req);
         String contentType = req.getContentType();
         String uuid = newUUID();
@@ -71,16 +82,29 @@ public class DocumentServlet extends HttpServlet {
     }
 
     @Override
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException {
+        ensureUuidParameter(true, req, resp);
+        String uuid = getExistingUuid(req, resp);
+
+        // judgment call: DRY principle
+        // technically, I could factor out the code common to doPut and doPost,
+        // however, both methods are small, might have to be modified independently,
+        // and factoring out the code doesn't lead to a huge saving of code duplication
+        // ==> prefer repeating code in this case
+        byte[] data = readContent(req);
+        String contentType = req.getContentType();
+        this.contentTypes.put(uuid, contentType);
+        this.documents.put(uuid, data);
+
+        resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+    }
+
+    @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
-        if (req.getPathInfo() == null) {
-            // user is trying to GET /storage/documents, which only accepts POST
-            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-        }
-        String uuid = req.getPathInfo().substring(1);  // strip '/' at beginning
-        if (!this.documents.containsKey(uuid)) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND);
-        }
+            throws IOException {
+        ensureUuidParameter(true, req, resp);
+        String uuid = getExistingUuid(req, resp);
 
         resp.setContentType(this.contentTypes.get(uuid));
         byte[] doc = this.documents.get(uuid);
@@ -88,6 +112,5 @@ public class DocumentServlet extends HttpServlet {
 
         BufferedOutputStream out = new BufferedOutputStream(resp.getOutputStream());
         out.write(doc);
-
     }
 }
