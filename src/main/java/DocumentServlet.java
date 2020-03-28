@@ -14,6 +14,9 @@ public class DocumentServlet extends HttpServlet {
     private HashMap<String, byte[]> documents = new HashMap<>();
     private HashMap<String, String> contentTypes = new HashMap<>();
 
+    /**
+     * Generates a 20 characters long alphanumeric UUID
+     */
     static private String newUUID() {
         StringBuilder uuid = new StringBuilder();
         for (int i = 0; i < 20; i++) {
@@ -27,25 +30,49 @@ public class DocumentServlet extends HttpServlet {
         return uuid.toString();
     }
 
-    static private void ensureUuidParameter(boolean shouldBePresent, HttpServletRequest req, HttpServletResponse resp)
-            throws IOException {
+    /**
+     *  Error handling is done as follows: Error handling code is factored out into helper methods.
+     *  If an error is encountered, the corresponding HTTP status code is set immediately, and an
+     *  IllegalArgumentException is raised. This way, the different method handlers need
+     *  only ignore the exception and return, leading to cleaner code.
+     *
+     *  Using exceptions for control flow is generally frowned upon, but IMO, in production code this
+     *  would be worth it in this case, as it obviates the need to be careful to check for error codes
+     *  of every input validation method in every method.
+     */
+
+    /**
+     * If the first argument is `true`, ensures the UUID parameter is present in the request URL,
+     * otherwise ensures the UUID parameter is NOT present.
+     * @param shouldBePresent whether the URL should conform to the pattern /storage/documents/SOMETHING or /storage/documents
+     * @throws IllegalArgumentException If the condition required by the first argument is NOT fulfilled.
+     *   In this case, the HTTP status code is already set
+     */
+    static private void assertUuidParameter(boolean shouldBePresent, HttpServletRequest req, HttpServletResponse resp)
+            throws IOException, IllegalArgumentException {
         if ((req.getPathInfo() != null) != shouldBePresent) {
             resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+            throw new IllegalArgumentException();
         }
     }
 
-    private String getExistingUuid(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+    /**
+     * Asserts that the requested document is actually present on the server, and returns its UUID
+     * @throws IllegalArgumentException If the document can't be found. In this case, HTTP status code 404 is already set.
+     */
+    private String assertAndGetExistingUuid(HttpServletRequest req, HttpServletResponse resp)
+            throws IOException, IllegalArgumentException {
         String uuid = req.getPathInfo().substring(1);  // strip '/' at beginning
         if (!this.documents.containsKey(uuid)) {
-            // a note on API design:
-            // sendError does not actually send an error (and escape via Exception), and since using exceptions
-            // as a control flow mechanism is frowned upon, I suppose we're doing more null checks, eh?
             resp.sendError(HttpServletResponse.SC_NOT_FOUND);
-            return null;
+            throw new IllegalArgumentException();
         }
         return uuid;
     }
 
+    /**
+     * Read the request's Content as uninterpreted byte array
+     */
     static private byte[] readContent(HttpServletRequest req) throws IOException {
         // since "documents don't need to be persisted cross server shutdown"
         // I'm assuming every file will fit in a single allocation in memory
@@ -71,63 +98,68 @@ public class DocumentServlet extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        ensureUuidParameter(false, req, resp);
+        try {
+            assertUuidParameter(false, req, resp);
 
-        byte[] data = readContent(req);
-        String contentType = req.getContentType();
-        String uuid = newUUID();
-        this.contentTypes.put(uuid, contentType);
-        this.documents.put(uuid, data);
+            byte[] data = readContent(req);
+            String contentType = req.getContentType();
+            String uuid = newUUID();
+            this.contentTypes.put(uuid, contentType);
+            this.documents.put(uuid, data);
 
-        resp.setStatus(HttpServletResponse.SC_CREATED);
-        PrintWriter out = resp.getWriter();
-        out.write(uuid + '\n');
+            resp.setStatus(HttpServletResponse.SC_CREATED);
+            PrintWriter out = resp.getWriter();
+            out.write(uuid + '\n');
+        } catch(IllegalArgumentException alreadyHandled) {}
     }
 
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        ensureUuidParameter(true, req, resp);
-        String uuid = getExistingUuid(req, resp);
-        if (uuid == null) return;
+        try {
+            assertUuidParameter(true, req, resp);
+            String uuid = assertAndGetExistingUuid(req, resp);
 
-        // judgment call: DRY principle
-        // technically, I could factor out the code common to doPut and doPost,
-        // however, both methods are small, might have to be modified independently,
-        // and factoring out the code doesn't lead to a huge saving of code duplication
-        // ==> prefer repeating code in this case
-        byte[] data = readContent(req);
-        String contentType = req.getContentType();
-        this.contentTypes.put(uuid, contentType);
-        this.documents.put(uuid, data);
+            // judgment call: DRY principle
+            // technically, I could factor out the code common to doPut and doPost,
+            // however, both methods are small, might have to be modified independently,
+            // and factoring out the code doesn't lead to a huge saving of code duplication
+            // ==> prefer repeating code in this case
+            byte[] data = readContent(req);
+            String contentType = req.getContentType();
+            this.contentTypes.put(uuid, contentType);
+            this.documents.put(uuid, data);
 
-        resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+            resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+        } catch(IllegalArgumentException alreadyHandled) {}
     }
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws IOException {
-        ensureUuidParameter(true, req, resp);
-        String uuid = getExistingUuid(req, resp);
-        if (uuid == null) return;
+        try {
+            assertUuidParameter(true, req, resp);
+            String uuid = assertAndGetExistingUuid(req, resp);
 
-        resp.setContentType(this.contentTypes.get(uuid));
-        byte[] doc = this.documents.get(uuid);
-        resp.setContentLength(doc.length);
+            resp.setContentType(this.contentTypes.get(uuid));
+            byte[] doc = this.documents.get(uuid);
+            resp.setContentLength(doc.length);
 
-        BufferedOutputStream out = new BufferedOutputStream(resp.getOutputStream());
-        out.write(doc);
-        out.flush();
+            BufferedOutputStream out = new BufferedOutputStream(resp.getOutputStream());
+            out.write(doc);
+            out.flush();
+        } catch(IllegalArgumentException alreadyHandled) {}
     }
 
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
-        ensureUuidParameter(true, req, resp);
-        String uuid = getExistingUuid(req, resp);
-        if (uuid == null) return;
+        try {
+            assertUuidParameter(true, req, resp);
+            String uuid = assertAndGetExistingUuid(req, resp);
 
-        this.documents.remove(uuid);
-        this.contentTypes.remove(uuid);
-        resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+            this.documents.remove(uuid);
+            this.contentTypes.remove(uuid);
+            resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+        } catch(IllegalArgumentException alreadyHandled) {}
     }
 }
