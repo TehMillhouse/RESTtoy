@@ -109,7 +109,7 @@ public class DocumentServlet extends HttpServlet {
 
             resp.setStatus(HttpServletResponse.SC_CREATED);
             PrintWriter out = resp.getWriter();
-            out.write(uuid + '\n');
+            out.write(uuid);
         } catch(IllegalArgumentException alreadyHandled) {}
     }
 
