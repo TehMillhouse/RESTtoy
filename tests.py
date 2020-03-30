@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 import subprocess
 
 def doTest(method, url, exp_status, req_data=None, exp_data=None):

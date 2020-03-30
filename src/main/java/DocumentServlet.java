@@ -24,7 +24,7 @@ public class DocumentServlet extends HttpServlet {
             if (idx < 10) {
                 uuid.append(idx);
             } else {
-                uuid.append((char) (((int) 'A') + (idx - 10)));
+                uuid.append((char) (((int) 'A') + idx - 10));
             }
         }
         return uuid.toString();
