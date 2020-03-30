@@ -31,14 +31,14 @@ public class DocumentServlet extends HttpServlet {
     }
 
     /**
-     *  Error handling is done as follows: Error handling code is factored out into helper methods.
-     *  If an error is encountered, the corresponding HTTP status code is set immediately, and an
-     *  IllegalArgumentException is raised. This way, the different method handlers need
-     *  only ignore the exception and return, leading to cleaner code.
+     *  On input validation: validating the preconditions for the server routes (is the UUID there?
+     *  does it correspond to an existing document?) is done in helper methods which set the
+     *  HTTP status code in case of an error. Unfortunately, HttpServletResponse.sendError does
+     *  *not* actually send an error immediately (and escape via exception), so I have to do that myself.
      *
-     *  Using exceptions for control flow is generally frowned upon, but IMO, in production code this
-     *  would be worth it in this case, as it obviates the need to be careful to check for error codes
-     *  of every input validation method in every method.
+     *  Using exceptions for control flow is generally frowned upon, but IMO, it's worth it in this case,
+     *  as this condenses the if-then-else-cascade of input validation into
+     *  a row of assertions, which is much easier to read.
      */
 
     /**
