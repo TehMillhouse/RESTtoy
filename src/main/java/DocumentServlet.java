@@ -10,9 +10,7 @@ import java.util.Random;
 public class DocumentServlet extends HttpServlet {
 
     static private Random rng = new Random();
-    // if Java had tuples, I'd use a HashMap<String, (String, byte[])>, but alas...
-    private HashMap<String, byte[]> documents = new HashMap<>();
-    private HashMap<String, String> contentTypes = new HashMap<>();
+    private HashMap<String, Document> documents = new HashMap<>();
 
     /**
      * Generates a 20 characters long alphanumeric UUID
@@ -104,8 +102,8 @@ public class DocumentServlet extends HttpServlet {
             byte[] data = readContent(req);
             String contentType = req.getContentType();
             String uuid = newUUID();
-            this.contentTypes.put(uuid, contentType);
-            this.documents.put(uuid, data);
+            Document newDoc = new Document(contentType, data);
+            this.documents.put(uuid, newDoc);
 
             resp.setStatus(HttpServletResponse.SC_CREATED);
             PrintWriter out = resp.getWriter();
@@ -127,8 +125,8 @@ public class DocumentServlet extends HttpServlet {
             // ==> prefer repeating code in this case
             byte[] data = readContent(req);
             String contentType = req.getContentType();
-            this.contentTypes.put(uuid, contentType);
-            this.documents.put(uuid, data);
+            Document newDoc = new Document(contentType, data);
+            this.documents.put(uuid, newDoc);
 
             resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
         } catch(IllegalArgumentException alreadyHandled) {}
@@ -141,12 +139,13 @@ public class DocumentServlet extends HttpServlet {
             assertUuidParameter(true, req, resp);
             String uuid = assertAndGetExistingUuid(req, resp);
 
-            resp.setContentType(this.contentTypes.get(uuid));
-            byte[] doc = this.documents.get(uuid);
-            resp.setContentLength(doc.length);
+            Document doc = this.documents.get(uuid);
+            resp.setContentType(doc.getContentType());
+            byte[] data = doc.getData();
+            resp.setContentLength(data.length);
 
             BufferedOutputStream out = new BufferedOutputStream(resp.getOutputStream());
-            out.write(doc);
+            out.write(data);
             out.flush();
         } catch(IllegalArgumentException alreadyHandled) {}
     }
@@ -158,7 +157,6 @@ public class DocumentServlet extends HttpServlet {
             String uuid = assertAndGetExistingUuid(req, resp);
 
             this.documents.remove(uuid);
-            this.contentTypes.remove(uuid);
             resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
         } catch(IllegalArgumentException alreadyHandled) {}
     }
